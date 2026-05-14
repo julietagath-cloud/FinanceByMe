@@ -425,6 +425,12 @@ body{color:var(--text);font-family:var(--ff);font-size:15px;}
       <div style="font-size:10px;color:var(--muted);margin-top:4px;">Si el concepto no existe, crealo en la solapa Ingresos.</div>
     </div>
 
+    <!-- Cambio USD — solo cuando INGRESO + Cambio USD -->
+    <div class="fg" id="fg-cambio-usd" style="display:none;">
+      <label>Cambio a (nombre)</label>
+      <input type="text" id="n-cambio-a" placeholder="Ej: Juan, Banco, etc.">
+    </div>
+
     <!-- Descripción -->
     <div class="fg"><label>Descripción (opcional)</label><input type="text" id="ndesc" placeholder="¿Qué fue?"></div>
 
@@ -528,6 +534,16 @@ body{color:var(--text);font-family:var(--ff);font-size:15px;}
     <div style="background:var(--s2);border-radius:10px;padding:10px 13px;margin-top:4px;display:flex;justify-content:space-between;">
       <span style="font-size:12px;font-weight:600;color:var(--wine);">Total otros cobrado</span>
       <span class="gn" style="font-family:var(--fm);font-size:13px;font-weight:700;" id="otros-total">$0</span>
+    </div>
+  </div>
+
+  <!-- ── CAMBIO USD ── -->
+  <div class="ing-section">
+    <div class="ing-section-title">Cambio USD</div>
+    <div id="cambio-usd-list"></div>
+    <div style="background:var(--s2);border-radius:10px;padding:10px 13px;margin-top:4px;display:flex;justify-content:space-between;">
+      <span style="font-size:12px;font-weight:600;color:var(--wine);">Total cambiado</span>
+      <span style="font-family:var(--fm);font-size:13px;font-weight:700;color:var(--amber);" id="cambio-usd-total">$0</span>
     </div>
   </div>
 
@@ -726,6 +742,22 @@ body{color:var(--text);font-family:var(--ff);font-size:15px;}
   </div>
 </div>
 
+<!-- CAMBIO USD EDIT SHEET -->
+<div class="overlay" id="sh-edit-cambio" onclick="if(event.target===this)closeEditCambio()">
+  <div class="sheet"><div class="sheet-handle"></div>
+    <div class="sheet-title">Editar entrega de efectivo</div>
+    <input type="hidden" id="ec-id">
+    <div style="background:var(--s2);border-radius:10px;padding:11px 13px;margin-bottom:14px;" id="ec-info"></div>
+    <div class="fg"><label>Cash entregado (U$)</label><input type="number" id="ec-cash" placeholder="0" step="0.01" inputmode="decimal"></div>
+    <div class="fg"><label>Fecha de entrega</label><input type="date" id="ec-fecha"></div>
+    <div class="fg"><label>Nota (opcional)</label><input type="text" id="ec-nota" placeholder="Detalle..."></div>
+    <div class="sheet-actions">
+      <button class="btn-main btn-ghost" onclick="closeEditCambio()">Cancelar</button>
+      <button class="btn-main btn-primary" onclick="saveEditCambio()"><i class="fas fa-check"></i> Guardar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -741,7 +773,7 @@ const RUBROS_ARS=[
   {g:'Extras',  subs:['ExtraVariable','Otros']},
 ];
 const RUBROS_USD=[{g:'',subs:['Gasto Mensual','Gasto Extra','A Ahorro','A Prestamo']}];
-const RUBROS_INGRESO=[{g:'',subs:['Pago Malva','Pago otro']}];
+const RUBROS_INGRESO=[{g:'',subs:['Pago Malva','Pago otro','Cambio USD']}];
 
 // ══════════════════════════════════════════
 // BUDGET
@@ -803,6 +835,9 @@ let otroConceptos=[];
 let otroPagos=[];
 let cpoMoneda='ARS';
 let editingOtroConceptoId=null;
+
+// cambioUSD: [{_id, cambioA, monto, mes, cashEntregado, fechaEntrega}]
+let cambioUSD=[];
 
 // ══════════════════════════════════════════
 // TX DATA
@@ -1186,6 +1221,37 @@ function renderIngresos(){
 
   const totalOtrosARS2=otroPagos.reduce((s,p)=>s+p.montoARSEquiv,0);
   document.getElementById('otros-total').textContent=ars(totalOtrosARS2);
+
+  // ── Cambio USD ──
+  const totalCambioARS=cambioUSD.reduce((s,c)=>s+c.monto,0);
+  document.getElementById('cambio-usd-list').innerHTML=cambioUSD.length===0?
+    '<div style="font-size:12px;color:var(--muted);padding:8px 0;">Sin cambios registrados.</div>':
+    `<div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border);">
+            <th style="text-align:left;padding:7px 8px;font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Cambio a</th>
+            <th style="text-align:right;padding:7px 8px;font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Monto $</th>
+            <th style="text-align:right;padding:7px 8px;font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Cash U$ entregado</th>
+            <th style="text-align:left;padding:7px 8px;font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Fecha entrega</th>
+            <th style="padding:7px 4px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cambioUSD.map(c=>`
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:9px 8px;font-weight:500;color:var(--wine);">${c.cambioA}</td>
+              <td style="padding:9px 8px;text-align:right;font-family:var(--fm);color:var(--green);">${ars(c.monto)}</td>
+              <td style="padding:9px 8px;text-align:right;font-family:var(--fm);color:${c.cashEntregado?'var(--amber)':'var(--dim)'};">${c.cashEntregado?fusd(c.cashEntregado):'—'}</td>
+              <td style="padding:9px 8px;color:${c.fechaEntrega?'var(--wine)':'var(--dim)'};">${c.fechaEntrega||'—'}</td>
+              <td style="padding:9px 4px;">
+                <button onclick="openEditCambio('${c._id}')" style="background:none;border:1px solid var(--border2);border-radius:6px;padding:3px 6px;cursor:pointer;color:var(--muted);font-size:10px;"><i class="fas fa-pen"></i></button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('cambio-usd-total').textContent=ars(totalCambioARS);
 }
 
 // ══════════════════════════════════════════
@@ -1544,8 +1610,14 @@ function renderRubros(){
     fgC.style.display='none';
     if(selRubro!=='Pago otro') selConceptoCargar='';
   }
-  // Show/hide concepto Otro
-  const fgCO=document.getElementById('fg-concepto-otro');
+  // Show/hide Cambio USD field
+  const fgCU=document.getElementById('fg-cambio-usd');
+  if(selOp==='INGRESO'&&selRubro==='Cambio USD'){
+    fgCU.style.display='';
+  } else {
+    fgCU.style.display='none';
+    if(document.getElementById('n-cambio-a')) document.getElementById('n-cambio-a').value='';
+  }
   if(selOp==='INGRESO'&&selRubro==='Pago otro'){
     fgCO.style.display='';
     if(!selConceptoCargar) selConceptoCargar=otroConceptos.length===1?otroConceptos[0].id:'';
@@ -1563,6 +1635,36 @@ function renderRubros(){
 
 function pickRub(r){selRubro=r;selConceptoCargar='';renderRubros();}
 
+
+// ══════════════════════════════════════════
+// CAMBIO USD — EDITAR ENTREGA
+// ══════════════════════════════════════════
+function openEditCambio(id){
+  const c=cambioUSD.find(x=>x._id===id);
+  if(!c)return;
+  document.getElementById('ec-id').value=id;
+  document.getElementById('ec-info').innerHTML=`<div style="font-size:11px;color:var(--muted);margin-bottom:2px;">Cambio a</div><div style="font-size:13px;font-weight:600;color:var(--wine);">${c.cambioA}</div><div style="font-family:var(--fm);font-size:12px;color:var(--green);margin-top:3px;">${ars(c.monto)} · ${c.mes}</div>`;
+  document.getElementById('ec-cash').value=c.cashEntregado||'';
+  document.getElementById('ec-fecha').value=c.fechaEntrega||'';
+  document.getElementById('ec-nota').value=c.nota||'';
+  document.getElementById('sh-edit-cambio').classList.add('open');
+}
+function closeEditCambio(){document.getElementById('sh-edit-cambio').classList.remove('open');}
+async function saveEditCambio(){
+  const id=document.getElementById('ec-id').value;
+  const c=cambioUSD.find(x=>x._id===id);
+  if(!c){closeEditCambio();return;}
+  c.cashEntregado=parseFloat(document.getElementById('ec-cash').value)||null;
+  c.fechaEntrega=document.getElementById('ec-fecha').value||null;
+  c.nota=document.getElementById('ec-nota').value||'';
+  // Store as patch on movimiento description field (reuse descripcion for notes)
+  if(id&&!id.startsWith('local_')){
+    await sbPatch('movimientos',{id},{descripcion:`${c.cambioA}|${c.cashEntregado||''}|${c.fechaEntrega||''}|${c.nota}`});
+  }
+  closeEditCambio();
+  renderIngresos();
+  toast('✓ Entrega actualizada','ok');
+}
 
 // ══════════════════════════════════════════
 // EDITAR / BORRAR MOVIMIENTOS
@@ -1686,7 +1788,17 @@ async function loadAll(){
   try{
     // movimientos
     const movs=await sbGet('movimientos','select=*&order=created_at.asc');
-    if(movs){TX=movs.map(m=>({mes:m.mes,op:m.op,r:m.rubro||'',desc:m.descripcion||'',monto:parseFloat(m.monto),caja:m.caja,_id:m.id}));}
+    if(movs){
+      TX=movs.map(m=>({mes:m.mes,op:m.op,r:m.rubro||'',desc:m.descripcion||'',monto:parseFloat(m.monto),caja:m.caja,_id:m.id}));
+      // Rebuild cambioUSD from TX
+      cambioUSD=TX.filter(t=>t.r==='Cambio USD'&&t.op==='INGRESO').map(t=>{
+        // desc format: "cambioA|cashEntregado|fechaEntrega|nota" or just "cambioA"
+        const parts=t.desc.split('|');
+        return{_id:t._id,cambioA:parts[0]||t.desc,monto:t.monto,mes:t.mes,
+          cashEntregado:parts[1]?parseFloat(parts[1]):null,
+          fechaEntrega:parts[2]||null,nota:parts[3]||''};
+      });
+    }
 
     // saldos
     const saldos=await sbGet('saldos_iniciales','select=*');
@@ -1799,6 +1911,15 @@ async function guardar(){
     if(movRow){TX.unshift({mes,op:'INGRESO',r:'Pago otro',desc:pdesc,monto,caja:cajaFinal,_id:movRow[0].id});}
     updateCajas();if(activePage==='ingresos')renderIngresos();
     toast(`✓ Ingreso (${isUSD2?fusd(monto):ars(monto)}) registrado`,'ok');
+
+  } else if(selOp==='INGRESO'&&selRubro==='Cambio USD'){
+    const cambioA=document.getElementById('n-cambio-a').value.trim()||'Sin especificar';
+    const movRow=await sbInsert('movimientos',{mes,op:'INGRESO',rubro:'Cambio USD',descripcion:cambioA,monto,caja:cajaFinal});
+    const entry={_id:movRow?movRow[0].id:('local_'+Date.now()),cambioA,monto,mes,cashEntregado:null,fechaEntrega:null,nota:''};
+    cambioUSD.push(entry);
+    if(movRow){TX.unshift({mes,op:'INGRESO',r:'Cambio USD',desc:cambioA,monto,caja:cajaFinal,_id:movRow[0].id});}
+    updateCajas();if(activePage==='ingresos')renderIngresos();
+    toast(`✓ Cambio USD de ${ars(monto)} a ${cambioA} registrado`,'ok');
 
   } else {
     const movRow=await sbInsert('movimientos',{mes,op:selOp,rubro:selRubro||null,descripcion:desc||null,monto,caja:cajaFinal});
