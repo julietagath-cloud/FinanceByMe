@@ -195,7 +195,8 @@ body{color:var(--text);font-family:var(--ff);font-size:15px;}
 .rub-opt{padding:6px 12px;border-radius:20px;border:1.5px solid var(--border2);background:var(--s1);color:var(--muted);cursor:pointer;font-family:var(--ff);font-size:11px;font-weight:500;transition:all .12s;}
 .rub-opt.sel{border-color:var(--clay);background:var(--rdbg);color:var(--clay);}
 .btn-main{width:100%;padding:14px;border-radius:13px;border:none;cursor:pointer;font-family:var(--ff);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:7px;transition:transform .1s;}
-.btn-main:active{transform:scale(.98);}
+.btn-main:active{transform:scale(.95);opacity:.85;}
+.btn-primary:active{box-shadow:0 1px 6px rgba(201,125,110,.2);}
 .btn-primary{background:var(--clay);color:#fff;box-shadow:0 4px 18px rgba(201,125,110,.35);}
 .btn-ghost{background:var(--s2);color:var(--wine);border:1.5px solid var(--border2);}
 .btn-sm{padding:6px 11px;border-radius:8px;border:1.5px solid var(--border2);background:var(--s2);color:var(--wine);cursor:pointer;font-family:var(--ff);font-size:11px;font-weight:500;display:inline-flex;align-items:center;gap:4px;}
@@ -846,8 +847,8 @@ const MESES=['Enero','Febrero','Marzo','Abril','Mayo'];
 const COLS=['#c97d6e','#5a8a5e','#b87333','#6b7fa3','#d9876f','#8a6e9e','#7a9e7e','#a07060','#6e8a9e','#9e7a60'];
 let INIT={ca:0,ba:0,cu:0,au:0};
 const isU=c=>c==='Cash USD'||c==='Ahorro USD';
-const ars=v=>'$'+Math.round(Math.abs(v)).toLocaleString('es-AR');
-const fusd=v=>'U$'+(Math.round(Math.abs(v)*10)/10).toLocaleString('es-AR');
+const ars=v=>(v<0?'-':'')+'$'+Math.round(Math.abs(v)).toLocaleString('es-AR');
+const fusd=v=>(v<0?'-':'')+'U$'+(Math.round(Math.abs(v)*10)/10).toLocaleString('es-AR');
 const fmt=(v,c)=>isU(c)?fusd(v):ars(v);
 const toUSD=(v,tc)=>tc>0?'≈ U$'+(v/tc).toFixed(0):'';
 
@@ -865,7 +866,9 @@ function cajaStats(caja){
 function updateCajas(){
   [['ca','Cash ARS'],['ba','Banco ARS'],['cu','Cash USD'],['au','Ahorro USD']].forEach(([id,caja])=>{
     const{bal}=cajaStats(caja);
-    document.getElementById('bal-'+id).textContent=fmt(bal,caja);
+    const el=document.getElementById('bal-'+id);
+    el.textContent=fmt(bal,caja);
+    el.style.color=bal<0?'var(--clay)':'';
   });
 }
 
@@ -1939,6 +1942,8 @@ async function guardar(){
   }
   document.getElementById('nmonto').value='';document.getElementById('ndesc').value='';
   selRubro='';selConceptoCargar='';renderRubros();
+  // Scroll to top of screen
+  document.getElementById('screen').scrollTo({top:0,behavior:'smooth'});
 }
 
 // Guardar saldos
